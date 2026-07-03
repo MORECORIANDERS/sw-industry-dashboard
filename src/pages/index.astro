@@ -1,0 +1,243 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { hierarchy } from '../lib/hierarchy';
+
+const apiEnv = import.meta.env.PUBLIC_CLOUDBASE_ENV || '';
+const apiUrl = import.meta.env.PUBLIC_CLOUDBASE_URL || '';
+const hasBackend = !!(apiEnv || apiUrl);
+
+let totalPrimary = 0;
+for (const s of hierarchy.六大板块) totalPrimary += s.一级数量;
+let totalSecondary = 0;
+for (const s of hierarchy.六大板块) {
+  for (const p of s.children) totalSecondary += p.children.length;
+}
+
+const sectorColors = { 周期: '#e74c3c', 先进制造: '#3498db', '科技(TMT)': '#9b59b6', 消费: '#e67e22', 医药医疗: '#2ecc71', 金融地产: '#f1c40f' };
+---
+
+<BaseLayout>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <div class="app-logo">
+        <div class="app-logo-icon">SW</div>
+        <div>
+          <div class="app-title">申万行业 <span>行情</span></div>
+          <div class="app-subtitle">实时数据看板</div>
+        </div>
+      </div>
+      <div class="header-time" id="headerTime"></div>
+    </div>
+    <div class="header-accent"></div>
+  </header>
+
+  <main class="app-main">
+    <nav class="tab-nav" role="tablist">
+      <button class="tab-btn active" data-tab="sector" role="tab">六大风格 <span class="count">6</span></button>
+      <button class="tab-btn" data-tab="primary" role="tab">一级行业 <span class="count">{totalPrimary}</span></button>
+      <button class="tab-btn" data-tab="secondary" role="tab">二级行业 <span class="count">{totalSecondary}</span></button>
+    </nav>
+
+    <section class="panel active" id="panelSector" role="tabpanel">
+      <div class="sector-grid" id="sectorGrid"><div class="loading"><div class="spinner"></div><div class="loading-text">加载行情数据...</div></div></div>
+    </section>
+
+    <section class="panel" id="panelPrimary" role="tabpanel">
+      <div class="search-bar"><span class="search-icon">&#128269;</span><input class="search-input" type="text" id="primarySearch" placeholder="搜索一级行业..." /></div>
+      <div id="primaryContent"><div class="loading"><div class="spinner"></div><div class="loading-text">加载行情数据...</div></div></div>
+    </section>
+
+    <section class="panel" id="panelSecondary" role="tabpanel">
+      <div class="search-bar"><span class="search-icon">&#128269;</span><input class="search-input" type="text" id="secondarySearch" placeholder="搜索二级行业..." /></div>
+      <div id="secondaryContent"><div class="loading"><div class="spinner"></div><div class="loading-text">加载行情数据...</div></div></div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    数据来源：申万宏源指数 &middot; <a href="https://github.com/akfamily/akshare" target="_blank" rel="noopener">akshare</a>
+    &middot; <a href="https://gitee.com/ExtraCilantro/sw-map" target="_blank" rel="noopener">源码</a>
+  </footer>
+
+  <script id="boot-data" type="application/json" set:html={JSON.stringify({ hierarchy, sectorColors, apiEnv, apiUrl, hasBackend })}></script>
+
+  <script is:inline>
+  (() => {
+    const BOOT = JSON.parse(document.getElementById('boot-data').textContent);
+    const HIERARCHY = BOOT.hierarchy;
+    const COLORS = BOOT.sectorColors;
+    const CLOUDBASE_URL = BOOT.apiUrl;
+    const CLOUDBASE_ENV = BOOT.apiEnv;
+
+    function getApiUrl(type) {
+      if (CLOUDBASE_URL) return CLOUDBASE_URL + '/sw-index?type=' + type;
+      if (CLOUDBASE_ENV) return 'https://' + CLOUDBASE_ENV + '.service.tcloudbase.com/sw-index?type=' + type;
+      return '';
+    }
+
+    function isEmpty(v) { return v === null || v === undefined || v === '--'; }
+    function fmtPrice(v) { return isEmpty(v) ? '--' : Number(v).toFixed(2); }
+    function fmtChange(v) {
+      if (isEmpty(v)) return { text: '--', cls: '' };
+      const n = Number(v);
+      return { text: n >= 0 ? '+' + n.toFixed(2) + '%' : n.toFixed(2) + '%', cls: n >= 0 ? 'up' : 'down' };
+    }
+
+    // clock
+    function updateClock() {
+      document.getElementById('headerTime').textContent = new Date().toLocaleString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    updateClock(); setInterval(updateClock, 1000);
+
+    // tabs
+    document.querySelectorAll('.tab-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+        document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+        btn.classList.add('active');
+        var tab = btn.dataset.tab;
+        document.getElementById('panel' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+      });
+    });
+
+    // search
+    document.getElementById('primarySearch').addEventListener('input', function() {
+      var q = this.value.trim();
+      document.querySelectorAll('#primaryContent .industry-sector-group').forEach(function(g) {
+        var visible = false;
+        g.querySelectorAll('.industry-card').forEach(function(c) {
+          var match = !q || c.querySelector('.industry-name').textContent.includes(q);
+          c.style.display = match ? '' : 'none';
+          if (match) visible = true;
+        });
+        g.style.display = visible || !q ? '' : 'none';
+      });
+    });
+
+    document.getElementById('secondarySearch').addEventListener('input', function() {
+      var q = this.value.trim();
+      document.querySelectorAll('#secondaryContent .secondary-group').forEach(function(g) {
+        var visible = false;
+        g.querySelectorAll('.secondary-item').forEach(function(item) {
+          var match = !q || item.querySelector('.secondary-item-name').textContent.includes(q);
+          item.style.display = match ? '' : 'none';
+          if (match) visible = true;
+        });
+        g.style.display = visible || !q ? '' : 'none';
+      });
+    });
+
+    // render sector cards
+    function renderSectors(data) {
+      var grid = document.getElementById('sectorGrid');
+      var map = {};
+      data.forEach(function(item) { map[item['\u6307\u6570\u540d\u79f0']] = item; });
+      var html = '';
+      HIERARCHY['\u516d\u5927\u677f\u5757'].forEach(function(s) {
+        var d = map[s['\u677f\u5757']] || {};
+var c = fmtChange(d['\u6da8\u8dcc\u5e45']);
+          var color = COLORS[s['\u677f\u5757']] || '#666';
+          html += '<div class="sector-card" style="--sector-color:' + color + '">'
+            + '<div class="sector-card-header"><div class="sector-name">' + s['\u677f\u5757'] + '</div>'
+            + '<div class="sector-index-code">' + (d['\u6307\u6570\u4ee3\u7801']||'--') + '</div></div>'
+            + '<div class="sector-price-area"><span class="sector-price">' + fmtPrice(d['\u6700\u65b0\u4ef7']) + '</span>'
+          + '<span class="sector-change ' + c.cls + '">' + c.text + '</span></div>'
+          + '<div class="sector-details">'
+          + '<span><span class="label">开</span>' + fmtPrice(d['\u4eca\u5f00\u76d8']) + '</span>'
+          + '<span><span class="label">高</span>' + fmtPrice(d['\u6700\u9ad8\u4ef7']) + '</span>'
+          + '<span><span class="label">低</span>' + fmtPrice(d['\u6700\u4f4e\u4ef7']) + '</span>'
+          + '<span><span class="label">量</span>' + (d['\u6210\u4ea4\u91cf']||'--') + '</span>'
+          + '<span><span class="label">额</span>' + (d['\u6210\u4ea4\u989d']||'--') + '</span>'
+          + '</div></div>';
+      });
+      grid.innerHTML = html;
+    }
+
+    // render primary industries
+    function renderPrimary(data) {
+      var container = document.getElementById('primaryContent');
+      var map = {};
+      data.forEach(function(item) { map[item['\u6307\u6570\u540d\u79f0']] = item; });
+      var html = '';
+      HIERARCHY['\u516d\u5927\u677f\u5757'].forEach(function(s) {
+        var color = COLORS[s['\u677f\u5757']] || '#666';
+        html += '<div class="industry-sector-group">'
+          + '<div class="industry-sector-header">'
+          + '<span class="industry-sector-dot" style="background:' + color + '"></span>'
+          + '<span class="industry-sector-title">' + s['\u677f\u5757'] + '</span>'
+          + '<span class="industry-sector-count">' + s['\u4e00\u7ea7\u6570\u91cf'] + ' 个一级行业</span>'
+          + '</div><div class="industry-grid">';
+        s.children.forEach(function(p) {
+          var d = map[p.name] || {};
+          var c = fmtChange(d['\u6da8\u8dcc\u5e45']);
+          html += '<div class="industry-card">'
+            + '<span class="industry-name">' + p.name + '</span>'
+            + '<div style="display:flex;align-items:center;gap:6px">'
+            + '<span class="industry-price">' + fmtPrice(d['\u6700\u65b0\u4ef7']) + '</span>'
+            + '<span class="industry-change ' + c.cls + '">' + c.text + '</span>'
+            + '</div></div>';
+        });
+        html += '</div></div>';
+      });
+      container.innerHTML = html;
+    }
+
+    // render secondary industries
+    function renderSecondary(data) {
+      var container = document.getElementById('secondaryContent');
+      var map = {};
+      data.forEach(function(item) { map[item['\u6307\u6570\u540d\u79f0']] = item; });
+      var html = '';
+      HIERARCHY['\u516d\u5927\u677f\u5757'].forEach(function(s) {
+        s.children.forEach(function(p) {
+          var kids = p.children;
+          if (!kids.length) return;
+          html += '<div class="secondary-group">'
+            + '<div class="secondary-group-header" onclick="var b=this.nextElementSibling;b.classList.toggle(\'open\');this.querySelector(\'.secondary-group-arrow\').classList.toggle(\'open\')">'
+            + '<span class="secondary-group-arrow open">&#9654;</span>'
+            + '<span class="secondary-group-title">' + p.name + '</span>'
+            + '<span class="secondary-group-count">' + kids.length + ' 个二级行业</span>'
+            + '</div>'
+            + '<div class="secondary-group-body open">';
+          kids.forEach(function(k) {
+            var d = map[k.name] || {};
+            var c = fmtChange(d['\u6da8\u8dcc\u5e45']);
+            html += '<div class="secondary-item">'
+              + '<span class="secondary-item-name">' + k.name + '</span>'
+              + '<span class="secondary-item-price">' + fmtPrice(d['\u6700\u65b0\u4ef7']) + '</span>'
+              + '<span class="secondary-item-change ' + c.cls + '">' + c.text + '</span>'
+              + '</div>';
+          });
+          html += '</div></div>';
+        });
+      });
+      container.innerHTML = html;
+    }
+
+    // fetch
+    async function loadAll() {
+      try {
+        var [sr, pr, srAll] = await Promise.all([
+          fetch(getApiUrl('sector')).then(function(r) { return r.json(); }),
+          fetch(getApiUrl('primary')).then(function(r) { return r.json(); }),
+          fetch(getApiUrl('secondary')).then(function(r) { return r.json(); }),
+        ]);
+        renderSectors(sr.data || sr);
+        renderPrimary(pr.data || pr);
+        renderSecondary(srAll.data || srAll);
+      } catch (err) {
+        var e = '<div class="error-state"><div class="icon">&#9888;</div><div class="msg">' + err.message + '</div><div class="hint">请检查 Cloudbase 云函数是否已部署，或稍后重试</div><button class="retry-btn" onclick="location.reload()">重新加载</button></div>';
+        document.getElementById('sectorGrid').innerHTML = e;
+        document.getElementById('primaryContent').innerHTML = e;
+        document.getElementById('secondaryContent').innerHTML = e;
+      }
+    }
+
+    if (BOOT.hasBackend) { loadAll(); } else {
+      var e = '<div class="error-state"><div class="icon">&#9888;</div><div class="msg">未配置 Cloudbase 后端</div><div class="hint">请在项目根目录创建 .env 文件，设置 PUBLIC_CLOUDBASE_ENV=你的环境ID</div></div>';
+      document.getElementById('sectorGrid').innerHTML = e;
+      document.getElementById('primaryContent').innerHTML = e;
+      document.getElementById('secondaryContent').innerHTML = e;
+    }
+  })();
+  </script>
+</BaseLayout>
