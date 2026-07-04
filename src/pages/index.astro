@@ -25,7 +25,6 @@ const sectorColors = SECTOR_COLORS;
       </div>
       <div class="header-time" id="headerTime"></div>
     </div>
-    <div class="header-accent"></div>
   </header>
 
   <main class="app-main">
@@ -36,23 +35,23 @@ const sectorColors = SECTOR_COLORS;
     </nav>
 
     <section class="panel active" id="panelSector" role="tabpanel">
-      <div class="sector-grid" id="sectorGrid"><div class="loading"><div class="spinner"></div><div class="loading-text">加载行情数据...</div></div></div>
+      <div class="sector-grid" id="sectorGrid"><div class="loading"><div class="spinner"></div><div class="loading-text">加载中</div></div></div>
     </section>
 
     <section class="panel" id="panelPrimary" role="tabpanel">
-      <div class="search-bar"><span class="search-icon">&#128269;</span><input class="search-input" type="text" id="primarySearch" placeholder="搜索一级行业..." /></div>
-      <div id="primaryContent"><div class="loading"><div class="spinner"></div><div class="loading-text">加载行情数据...</div></div></div>
+      <div class="search-bar"><span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><input class="search-input" type="text" id="primarySearch" placeholder="搜索一级行业..." /></div>
+      <div id="primaryContent"><div class="loading"><div class="spinner"></div><div class="loading-text">加载中</div></div></div>
     </section>
 
     <section class="panel" id="panelSecondary" role="tabpanel">
-      <div class="search-bar"><span class="search-icon">&#128269;</span><input class="search-input" type="text" id="secondarySearch" placeholder="搜索二级行业..." /></div>
-      <div id="secondaryContent"><div class="loading"><div class="spinner"></div><div class="loading-text">加载行情数据...</div></div></div>
+      <div class="search-bar"><span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><input class="search-input" type="text" id="secondarySearch" placeholder="搜索二级行业..." /></div>
+      <div id="secondaryContent"><div class="loading"><div class="spinner"></div><div class="loading-text">加载中</div></div></div>
     </section>
   </main>
 
   <footer class="app-footer">
-    数据来源：申万宏源指数 &middot; <a href="https://github.com/akfamily/akshare" target="_blank" rel="noopener">akshare</a>
-    &middot; <a href="https://github.com/MORECORIANDERS/sw-industry-dashboard" target="_blank" rel="noopener">源码</a>
+    申万宏源指数 · <a href="https://github.com/akfamily/akshare" target="_blank" rel="noopener">akshare</a>
+    · <a href="https://github.com/MORECORIANDERS/sw-industry-dashboard" target="_blank" rel="noopener">GitHub</a>
   </footer>
 
   <div class="last-update" id="lastUpdate"></div>
@@ -69,12 +68,12 @@ const sectorColors = SECTOR_COLORS;
   function showError(containerId, msg) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    container.innerHTML = `<div class="error-state"><div class="icon">&#9888;</div><div class="msg">${msg}</div><div class="hint">数据将在交易日盘后更新，请稍后再来</div><button class="retry-btn" onclick="location.reload()">重新加载</button></div>`;
+    container.innerHTML = `<div class="error-state"><div class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div class="msg">${msg}</div><div class="hint">数据将在交易日盘后更新，请稍后再来</div><button class="retry-btn" onclick="location.reload()">重新加载</button></div>`;
   }
 
   // clock
   function updateClock() {
-    document.getElementById('headerTime').textContent = new Date().toLocaleString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    document.getElementById('headerTime').textContent = new Date().toLocaleString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' });
   }
   updateClock();
   setInterval(updateClock, 1000);

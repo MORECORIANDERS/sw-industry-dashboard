@@ -6,5 +6,17 @@ export default defineConfig({
   outDir: 'dist',
   build: {
     assets: '_assets',
+    format: 'file',
+  },
+  compressHTML: true,
+  vite: {
+    build: {
+      cssMinify: 'esbuild',
+      rollupOptions: {
+        output: {
+          manualChunks: undefined,
+        },
+      },
+    },
   },
 });
