@@ -3,10 +3,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import { hierarchy } from '../lib/hierarchy';
 import { SECTOR_COLORS } from '../lib/api';
 
-const apiEnv = import.meta.env.PUBLIC_CLOUDBASE_ENV || '';
-const apiUrl = import.meta.env.PUBLIC_CLOUDBASE_URL || '';
-const hasBackend = !!(apiEnv || apiUrl);
-
 let totalPrimary = 0;
 for (const s of hierarchy.六大板块) totalPrimary += s.一级数量;
 let totalSecondary = 0;
@@ -59,7 +55,9 @@ const sectorColors = SECTOR_COLORS;
     &middot; <a href="https://github.com/MORECORIANDERS/sw-industry-dashboard" target="_blank" rel="noopener">源码</a>
   </footer>
 
-  <script id="boot-data" type="application/json" set:html={JSON.stringify({ hierarchy, sectorColors, apiEnv, apiUrl, hasBackend })}></script>
+  <div class="last-update" id="lastUpdate"></div>
+
+  <script id="boot-data" type="application/json" set:html={JSON.stringify({ hierarchy, sectorColors })}></script>
 
   <script>
   import { formatPrice, formatChange } from '../lib/api';
@@ -67,32 +65,11 @@ const sectorColors = SECTOR_COLORS;
   const BOOT = JSON.parse(document.getElementById('boot-data').textContent);
   const HIERARCHY = BOOT.hierarchy;
   const COLORS = BOOT.sectorColors;
-  const CLOUDBASE_URL = BOOT.apiUrl;
-  const CLOUDBASE_ENV = BOOT.apiEnv;
 
-  function getApiUrl(type) {
-    if (CLOUDBASE_URL) return CLOUDBASE_URL + '/sw-index?type=' + type;
-    if (CLOUDBASE_ENV) return 'https://' + CLOUDBASE_ENV + '.service.tcloudbase.com/sw-index?type=' + type;
-    return '';
-  }
-
-  async function fetchWithTimeout(url, ms = 15000) {
-    const ctrl = new AbortController();
-    const id = setTimeout(() => ctrl.abort(), ms);
-    try {
-      const r = await fetch(url, { signal: ctrl.signal });
-      if (!r.ok) throw new Error(`请求失败 (${r.status})`);
-      return r.json();
-    } finally {
-      clearTimeout(id);
-    }
-  }
-
-  function showError(containerId, err) {
-    const msg = err.name === 'AbortError' ? '请求超时，请稍后重试' : err.message;
+  function showError(containerId, msg) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    container.innerHTML = `<div class="error-state"><div class="icon">&#9888;</div><div class="msg">${msg}</div><div class="hint">请检查 Cloudbase 云函数是否已部署，或稍后重试</div><button class="retry-btn" onclick="location.reload()">重新加载</button></div>`;
+    container.innerHTML = `<div class="error-state"><div class="icon">&#9888;</div><div class="msg">${msg}</div><div class="hint">数据将在交易日盘后更新，请稍后再来</div><button class="retry-btn" onclick="location.reload()">重新加载</button></div>`;
   }
 
   // clock
@@ -227,40 +204,24 @@ const sectorColors = SECTOR_COLORS;
     container.innerHTML = html;
   }
 
-  // load all data with per-panel error handling
+  // fetch static market data JSON
   async function loadAll() {
-    const results = await Promise.allSettled([
-      fetchWithTimeout(getApiUrl('sector')),
-      fetchWithTimeout(getApiUrl('primary')),
-      fetchWithTimeout(getApiUrl('secondary')),
-    ]);
-
-    if (results[0].status === 'fulfilled') {
-      renderSectors(results[0].value.data || results[0].value);
-    } else {
-      showError('sectorGrid', results[0].reason);
-    }
-
-    if (results[1].status === 'fulfilled') {
-      renderPrimary(results[1].value.data || results[1].value);
-    } else {
-      showError('primaryContent', results[1].reason);
-    }
-
-    if (results[2].status === 'fulfilled') {
-      renderSecondary(results[2].value.data || results[2].value);
-    } else {
-      showError('secondaryContent', results[2].reason);
+    try {
+      const res = await fetch(import.meta.env.BASE_URL + 'data/market-data.json');
+      if (!res.ok) throw new Error(`加载失败 (${res.status})`);
+      const json = await res.json();
+      document.getElementById('lastUpdate').textContent = '更新于 ' + (json.updated_at || '--');
+      if (json.sector && json.sector.length) renderSectors(json.sector);
+      if (json.primary && json.primary.length) renderPrimary(json.primary);
+      if (json.secondary && json.secondary.length) renderSecondary(json.secondary);
+    } catch (err) {
+      const msg = err.message;
+      showError('sectorGrid', msg);
+      showError('primaryContent', msg);
+      showError('secondaryContent', msg);
     }
   }
 
-  if (BOOT.hasBackend) {
-    loadAll();
-  } else {
-    const e = '<div class="error-state"><div class="icon">&#9888;</div><div class="msg">未配置 Cloudbase 后端</div><div class="hint">请在项目根目录创建 .env 文件，设置 PUBLIC_CLOUDBASE_ENV=你的环境ID</div></div>';
-    document.getElementById('sectorGrid').innerHTML = e;
-    document.getElementById('primaryContent').innerHTML = e;
-    document.getElementById('secondaryContent').innerHTML = e;
-  }
+  loadAll();
   </script>
 </BaseLayout>

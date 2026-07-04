@@ -128,6 +128,16 @@ body {
   font-family: var(--font-mono);
 }
 
+.last-update {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  text-align: right;
+  padding: 0 24px 4px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: var(--font-mono);
+}
+
 .header-accent {
   height: 2px;
   background: linear-gradient(90deg, transparent 0%, var(--color-gold) 20%, var(--color-twilight) 50%, var(--color-gold) 80%, transparent 100%);

@@ -3,6 +3,8 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [master]
+  schedule:
+    - cron: '30 8 * * 1-5'   # 周一至五 16:30 CST
   workflow_dispatch:
 
 permissions:
@@ -19,6 +21,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install Python dependencies
+        run: pip install akshare pandas --upgrade -q
+      - name: Fetch market data
+        run: python scripts/fetch-market-data.py
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -27,8 +37,6 @@ jobs:
         run: npm install
       - name: Build
         run: npm run build
-        env:
-          PUBLIC_CLOUDBASE_ENV: python12-9guk780v324f024d
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
