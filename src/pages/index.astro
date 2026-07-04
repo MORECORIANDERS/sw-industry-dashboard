@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { hierarchy } from '../lib/hierarchy';
+import { SECTOR_COLORS } from '../lib/api';
 
 const apiEnv = import.meta.env.PUBLIC_CLOUDBASE_ENV || '';
 const apiUrl = import.meta.env.PUBLIC_CLOUDBASE_URL || '';
@@ -13,7 +14,7 @@ for (const s of hierarchy.六大板块) {
   for (const p of s.children) totalSecondary += p.children.length;
 }
 
-const sectorColors = { 周期: '#e74c3c', 先进制造: '#3498db', '科技(TMT)': '#9b59b6', 消费: '#e67e22', 医药医疗: '#2ecc71', 金融地产: '#f1c40f' };
+const sectorColors = SECTOR_COLORS;
 ---
 
 <BaseLayout>
@@ -55,189 +56,211 @@ const sectorColors = { 周期: '#e74c3c', 先进制造: '#3498db', '科技(TMT)'
 
   <footer class="app-footer">
     数据来源：申万宏源指数 &middot; <a href="https://github.com/akfamily/akshare" target="_blank" rel="noopener">akshare</a>
-    &middot; <a href="https://gitee.com/ExtraCilantro/sw-map" target="_blank" rel="noopener">源码</a>
+    &middot; <a href="https://github.com/MORECORIANDERS/sw-industry-dashboard" target="_blank" rel="noopener">源码</a>
   </footer>
 
   <script id="boot-data" type="application/json" set:html={JSON.stringify({ hierarchy, sectorColors, apiEnv, apiUrl, hasBackend })}></script>
 
-  <script is:inline>
-  (() => {
-    const BOOT = JSON.parse(document.getElementById('boot-data').textContent);
-    const HIERARCHY = BOOT.hierarchy;
-    const COLORS = BOOT.sectorColors;
-    const CLOUDBASE_URL = BOOT.apiUrl;
-    const CLOUDBASE_ENV = BOOT.apiEnv;
+  <script>
+  import { formatPrice, formatChange } from '../lib/api';
 
-    function getApiUrl(type) {
-      if (CLOUDBASE_URL) return CLOUDBASE_URL + '/sw-index?type=' + type;
-      if (CLOUDBASE_ENV) return 'https://' + CLOUDBASE_ENV + '.service.tcloudbase.com/sw-index?type=' + type;
-      return '';
+  const BOOT = JSON.parse(document.getElementById('boot-data').textContent);
+  const HIERARCHY = BOOT.hierarchy;
+  const COLORS = BOOT.sectorColors;
+  const CLOUDBASE_URL = BOOT.apiUrl;
+  const CLOUDBASE_ENV = BOOT.apiEnv;
+
+  function getApiUrl(type) {
+    if (CLOUDBASE_URL) return CLOUDBASE_URL + '/sw-index?type=' + type;
+    if (CLOUDBASE_ENV) return 'https://' + CLOUDBASE_ENV + '.service.tcloudbase.com/sw-index?type=' + type;
+    return '';
+  }
+
+  async function fetchWithTimeout(url, ms = 15000) {
+    const ctrl = new AbortController();
+    const id = setTimeout(() => ctrl.abort(), ms);
+    try {
+      const r = await fetch(url, { signal: ctrl.signal });
+      if (!r.ok) throw new Error(`请求失败 (${r.status})`);
+      return r.json();
+    } finally {
+      clearTimeout(id);
     }
+  }
 
-    function isEmpty(v) { return v === null || v === undefined || v === '--'; }
-    function fmtPrice(v) { return isEmpty(v) ? '--' : Number(v).toFixed(2); }
-    function fmtChange(v) {
-      if (isEmpty(v)) return { text: '--', cls: '' };
-      const n = Number(v);
-      return { text: n >= 0 ? '+' + n.toFixed(2) + '%' : n.toFixed(2) + '%', cls: n >= 0 ? 'up' : 'down' };
-    }
+  function showError(containerId, err) {
+    const msg = err.name === 'AbortError' ? '请求超时，请稍后重试' : err.message;
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = `<div class="error-state"><div class="icon">&#9888;</div><div class="msg">${msg}</div><div class="hint">请检查 Cloudbase 云函数是否已部署，或稍后重试</div><button class="retry-btn" onclick="location.reload()">重新加载</button></div>`;
+  }
 
-    // clock
-    function updateClock() {
-      document.getElementById('headerTime').textContent = new Date().toLocaleString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    }
-    updateClock(); setInterval(updateClock, 1000);
+  // clock
+  function updateClock() {
+    document.getElementById('headerTime').textContent = new Date().toLocaleString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
 
-    // tabs
-    document.querySelectorAll('.tab-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
-        document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
-        btn.classList.add('active');
-        var tab = btn.dataset.tab;
-        document.getElementById('panel' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
-      });
+  // tabs
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.tab;
+      document.getElementById('panel' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
     });
+  });
 
-    // search
-    document.getElementById('primarySearch').addEventListener('input', function() {
-      var q = this.value.trim();
-      document.querySelectorAll('#primaryContent .industry-sector-group').forEach(function(g) {
-        var visible = false;
-        g.querySelectorAll('.industry-card').forEach(function(c) {
-          var match = !q || c.querySelector('.industry-name').textContent.includes(q);
-          c.style.display = match ? '' : 'none';
-          if (match) visible = true;
-        });
-        g.style.display = visible || !q ? '' : 'none';
+  // search
+  document.getElementById('primarySearch').addEventListener('input', function () {
+    const q = this.value.trim();
+    document.querySelectorAll('#primaryContent .industry-sector-group').forEach(g => {
+      let visible = false;
+      g.querySelectorAll('.industry-card').forEach(c => {
+        const match = !q || c.querySelector('.industry-name').textContent.includes(q);
+        c.style.display = match ? '' : 'none';
+        if (match) visible = true;
       });
+      g.style.display = visible || !q ? '' : 'none';
     });
+  });
 
-    document.getElementById('secondarySearch').addEventListener('input', function() {
-      var q = this.value.trim();
-      document.querySelectorAll('#secondaryContent .secondary-group').forEach(function(g) {
-        var visible = false;
-        g.querySelectorAll('.secondary-item').forEach(function(item) {
-          var match = !q || item.querySelector('.secondary-item-name').textContent.includes(q);
-          item.style.display = match ? '' : 'none';
-          if (match) visible = true;
-        });
-        g.style.display = visible || !q ? '' : 'none';
+  document.getElementById('secondarySearch').addEventListener('input', function () {
+    const q = this.value.trim();
+    document.querySelectorAll('#secondaryContent .secondary-group').forEach(g => {
+      let visible = false;
+      g.querySelectorAll('.secondary-item').forEach(item => {
+        const match = !q || item.querySelector('.secondary-item-name').textContent.includes(q);
+        item.style.display = match ? '' : 'none';
+        if (match) visible = true;
       });
+      g.style.display = visible || !q ? '' : 'none';
     });
+  });
 
-    // render sector cards
-    function renderSectors(data) {
-      var grid = document.getElementById('sectorGrid');
-      var map = {};
-      data.forEach(function(item) { map[item['\u6307\u6570\u540d\u79f0']] = item; });
-      var html = '';
-      HIERARCHY['\u516d\u5927\u677f\u5757'].forEach(function(s) {
-        var d = map[s['\u677f\u5757']] || {};
-var c = fmtChange(d['\u6da8\u8dcc\u5e45']);
-          var color = COLORS[s['\u677f\u5757']] || '#666';
-          html += '<div class="sector-card" style="--sector-color:' + color + '">'
-            + '<div class="sector-card-header"><div class="sector-name">' + s['\u677f\u5757'] + '</div>'
-            + '<div class="sector-index-code">' + (d['\u6307\u6570\u4ee3\u7801']||'--') + '</div></div>'
-            + '<div class="sector-price-area"><span class="sector-price">' + fmtPrice(d['\u6700\u65b0\u4ef7']) + '</span>'
-          + '<span class="sector-change ' + c.cls + '">' + c.text + '</span></div>'
-          + '<div class="sector-details">'
-          + '<span><span class="label">开</span>' + fmtPrice(d['\u4eca\u5f00\u76d8']) + '</span>'
-          + '<span><span class="label">高</span>' + fmtPrice(d['\u6700\u9ad8\u4ef7']) + '</span>'
-          + '<span><span class="label">低</span>' + fmtPrice(d['\u6700\u4f4e\u4ef7']) + '</span>'
-          + '<span><span class="label">量</span>' + (d['\u6210\u4ea4\u91cf']||'--') + '</span>'
-          + '<span><span class="label">额</span>' + (d['\u6210\u4ea4\u989d']||'--') + '</span>'
+  // render sector cards
+  function renderSectors(data) {
+    const grid = document.getElementById('sectorGrid');
+    const map = {};
+    data.forEach(item => { map[item['指数名称']] = item; });
+    let html = '';
+    HIERARCHY['六大板块'].forEach(s => {
+      const d = map[s['板块']] || {};
+      const c = formatChange(d['涨跌幅']);
+      const color = COLORS[s['板块']] || '#666';
+      html += '<div class="sector-card" style="--sector-color:' + color + '">'
+        + '<div class="sector-card-header"><div class="sector-name">' + s['板块'] + '</div>'
+        + '<div class="sector-index-code">' + (d['指数代码'] || '--') + '</div></div>'
+        + '<div class="sector-price-area"><span class="sector-price">' + formatPrice(d['最新价']) + '</span>'
+        + '<span class="sector-change ' + c.cls + '">' + c.text + '</span></div>'
+        + '<div class="sector-details">'
+        + '<span><span class="label">开</span>' + formatPrice(d['今开盘']) + '</span>'
+        + '<span><span class="label">高</span>' + formatPrice(d['最高价']) + '</span>'
+        + '<span><span class="label">低</span>' + formatPrice(d['最低价']) + '</span>'
+        + '<span><span class="label">量</span>' + (d['成交量'] || '--') + '</span>'
+        + '<span><span class="label">额</span>' + (d['成交额'] || '--') + '</span>'
+        + '</div></div>';
+    });
+    grid.innerHTML = html;
+  }
+
+  // render primary industries
+  function renderPrimary(data) {
+    const container = document.getElementById('primaryContent');
+    const map = {};
+    data.forEach(item => { map[item['指数名称']] = item; });
+    let html = '';
+    HIERARCHY['六大板块'].forEach(s => {
+      const color = COLORS[s['板块']] || '#666';
+      html += '<div class="industry-sector-group">'
+        + '<div class="industry-sector-header">'
+        + '<span class="industry-sector-dot" style="background:' + color + '"></span>'
+        + '<span class="industry-sector-title">' + s['板块'] + '</span>'
+        + '<span class="industry-sector-count">' + s['一级数量'] + ' 个一级行业</span>'
+        + '</div><div class="industry-grid">';
+      s.children.forEach(p => {
+        const d = map[p.name] || {};
+        const c = formatChange(d['涨跌幅']);
+        html += '<div class="industry-card">'
+          + '<span class="industry-name">' + p.name + '</span>'
+          + '<div style="display:flex;align-items:center;gap:6px">'
+          + '<span class="industry-price">' + formatPrice(d['最新价']) + '</span>'
+          + '<span class="industry-change ' + c.cls + '">' + c.text + '</span>'
           + '</div></div>';
       });
-      grid.innerHTML = html;
-    }
+      html += '</div></div>';
+    });
+    container.innerHTML = html;
+  }
 
-    // render primary industries
-    function renderPrimary(data) {
-      var container = document.getElementById('primaryContent');
-      var map = {};
-      data.forEach(function(item) { map[item['\u6307\u6570\u540d\u79f0']] = item; });
-      var html = '';
-      HIERARCHY['\u516d\u5927\u677f\u5757'].forEach(function(s) {
-        var color = COLORS[s['\u677f\u5757']] || '#666';
-        html += '<div class="industry-sector-group">'
-          + '<div class="industry-sector-header">'
-          + '<span class="industry-sector-dot" style="background:' + color + '"></span>'
-          + '<span class="industry-sector-title">' + s['\u677f\u5757'] + '</span>'
-          + '<span class="industry-sector-count">' + s['\u4e00\u7ea7\u6570\u91cf'] + ' 个一级行业</span>'
-          + '</div><div class="industry-grid">';
-        s.children.forEach(function(p) {
-          var d = map[p.name] || {};
-          var c = fmtChange(d['\u6da8\u8dcc\u5e45']);
-          html += '<div class="industry-card">'
-            + '<span class="industry-name">' + p.name + '</span>'
-            + '<div style="display:flex;align-items:center;gap:6px">'
-            + '<span class="industry-price">' + fmtPrice(d['\u6700\u65b0\u4ef7']) + '</span>'
-            + '<span class="industry-change ' + c.cls + '">' + c.text + '</span>'
-            + '</div></div>';
+  // render secondary industries
+  function renderSecondary(data) {
+    const container = document.getElementById('secondaryContent');
+    const map = {};
+    data.forEach(item => { map[item['指数名称']] = item; });
+    let html = '';
+    HIERARCHY['六大板块'].forEach(s => {
+      s.children.forEach(p => {
+        const kids = p.children;
+        if (!kids.length) return;
+        html += '<div class="secondary-group">'
+          + '<div class="secondary-group-header" onclick="var b=this.nextElementSibling;b.classList.toggle(\'open\');this.querySelector(\'.secondary-group-arrow\').classList.toggle(\'open\')">'
+          + '<span class="secondary-group-arrow open">&#9654;</span>'
+          + '<span class="secondary-group-title">' + p.name + '</span>'
+          + '<span class="secondary-group-count">' + kids.length + ' 个二级行业</span>'
+          + '</div>'
+          + '<div class="secondary-group-body open">';
+        kids.forEach(k => {
+          const d = map[k.name] || {};
+          const c = formatChange(d['涨跌幅']);
+          html += '<div class="secondary-item">'
+            + '<span class="secondary-item-name">' + k.name + '</span>'
+            + '<span class="secondary-item-price">' + formatPrice(d['最新价']) + '</span>'
+            + '<span class="secondary-item-change ' + c.cls + '">' + c.text + '</span>'
+            + '</div>';
         });
         html += '</div></div>';
       });
-      container.innerHTML = html;
+    });
+    container.innerHTML = html;
+  }
+
+  // load all data with per-panel error handling
+  async function loadAll() {
+    const results = await Promise.allSettled([
+      fetchWithTimeout(getApiUrl('sector')),
+      fetchWithTimeout(getApiUrl('primary')),
+      fetchWithTimeout(getApiUrl('secondary')),
+    ]);
+
+    if (results[0].status === 'fulfilled') {
+      renderSectors(results[0].value.data || results[0].value);
+    } else {
+      showError('sectorGrid', results[0].reason);
     }
 
-    // render secondary industries
-    function renderSecondary(data) {
-      var container = document.getElementById('secondaryContent');
-      var map = {};
-      data.forEach(function(item) { map[item['\u6307\u6570\u540d\u79f0']] = item; });
-      var html = '';
-      HIERARCHY['\u516d\u5927\u677f\u5757'].forEach(function(s) {
-        s.children.forEach(function(p) {
-          var kids = p.children;
-          if (!kids.length) return;
-          html += '<div class="secondary-group">'
-            + '<div class="secondary-group-header" onclick="var b=this.nextElementSibling;b.classList.toggle(\'open\');this.querySelector(\'.secondary-group-arrow\').classList.toggle(\'open\')">'
-            + '<span class="secondary-group-arrow open">&#9654;</span>'
-            + '<span class="secondary-group-title">' + p.name + '</span>'
-            + '<span class="secondary-group-count">' + kids.length + ' 个二级行业</span>'
-            + '</div>'
-            + '<div class="secondary-group-body open">';
-          kids.forEach(function(k) {
-            var d = map[k.name] || {};
-            var c = fmtChange(d['\u6da8\u8dcc\u5e45']);
-            html += '<div class="secondary-item">'
-              + '<span class="secondary-item-name">' + k.name + '</span>'
-              + '<span class="secondary-item-price">' + fmtPrice(d['\u6700\u65b0\u4ef7']) + '</span>'
-              + '<span class="secondary-item-change ' + c.cls + '">' + c.text + '</span>'
-              + '</div>';
-          });
-          html += '</div></div>';
-        });
-      });
-      container.innerHTML = html;
+    if (results[1].status === 'fulfilled') {
+      renderPrimary(results[1].value.data || results[1].value);
+    } else {
+      showError('primaryContent', results[1].reason);
     }
 
-    // fetch
-    async function loadAll() {
-      try {
-        var [sr, pr, srAll] = await Promise.all([
-          fetch(getApiUrl('sector')).then(function(r) { return r.json(); }),
-          fetch(getApiUrl('primary')).then(function(r) { return r.json(); }),
-          fetch(getApiUrl('secondary')).then(function(r) { return r.json(); }),
-        ]);
-        renderSectors(sr.data || sr);
-        renderPrimary(pr.data || pr);
-        renderSecondary(srAll.data || srAll);
-      } catch (err) {
-        var e = '<div class="error-state"><div class="icon">&#9888;</div><div class="msg">' + err.message + '</div><div class="hint">请检查 Cloudbase 云函数是否已部署，或稍后重试</div><button class="retry-btn" onclick="location.reload()">重新加载</button></div>';
-        document.getElementById('sectorGrid').innerHTML = e;
-        document.getElementById('primaryContent').innerHTML = e;
-        document.getElementById('secondaryContent').innerHTML = e;
-      }
+    if (results[2].status === 'fulfilled') {
+      renderSecondary(results[2].value.data || results[2].value);
+    } else {
+      showError('secondaryContent', results[2].reason);
     }
+  }
 
-    if (BOOT.hasBackend) { loadAll(); } else {
-      var e = '<div class="error-state"><div class="icon">&#9888;</div><div class="msg">未配置 Cloudbase 后端</div><div class="hint">请在项目根目录创建 .env 文件，设置 PUBLIC_CLOUDBASE_ENV=你的环境ID</div></div>';
-      document.getElementById('sectorGrid').innerHTML = e;
-      document.getElementById('primaryContent').innerHTML = e;
-      document.getElementById('secondaryContent').innerHTML = e;
-    }
-  })();
+  if (BOOT.hasBackend) {
+    loadAll();
+  } else {
+    const e = '<div class="error-state"><div class="icon">&#9888;</div><div class="msg">未配置 Cloudbase 后端</div><div class="hint">请在项目根目录创建 .env 文件，设置 PUBLIC_CLOUDBASE_ENV=你的环境ID</div></div>';
+    document.getElementById('sectorGrid').innerHTML = e;
+    document.getElementById('primaryContent').innerHTML = e;
+    document.getElementById('secondaryContent').innerHTML = e;
+  }
   </script>
 </BaseLayout>

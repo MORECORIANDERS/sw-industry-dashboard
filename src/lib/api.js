@@ -52,4 +52,4 @@ export const SECTOR_COLORS = {
   '金融地产': '#f1c40f',
 };
 
-export const SECTOR_ORDER = ['周期', '先进制造', '科技(TMT)', '消费', '医药医疗', '金融地产'];
+export const SECTOR_ORDER = /** @deprecated 未使用 */ ['周期', '先进制造', '科技(TMT)', '消费', '医药医疗', '金融地产'];
